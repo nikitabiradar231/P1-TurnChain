@@ -1,0 +1,22 @@
+# Foundry
+out/
+cache/
+broadcast/
+
+# Node & Frontend
+node_modules/
+dist/
+.vite/
+
+# Environment & Private Keys
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
