@@ -12,6 +12,10 @@ import {
   Check,
   RotateCcw,
   Zap,
+  Swords,
+  ExternalLink,
+  Loader2,
+  Copy,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
@@ -29,44 +33,60 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onRefresh,
   onBackToLobby,
 }) => {
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
+  // Move contract write
   const {
     writeContract: writeMove,
     data: moveHash,
     isPending: isMovePending,
     error: moveError,
+    reset: resetMoveError,
   } = useWriteContract();
 
+  // Join contract write (for direct invite links)
+  const {
+    writeContract: writeJoinGame,
+    data: joinHash,
+    isPending: isJoinPending,
+    error: joinError,
+  } = useWriteContract();
+
+  // Timeout contract write
   const {
     writeContract: writeTimeout,
     data: timeoutHash,
     isPending: isTimeoutPending,
+    error: timeoutError,
   } = useWriteContract();
 
   const { isLoading: isMoveConfirming, isSuccess: isMoveSuccess } =
     useWaitForTransactionReceipt({ hash: moveHash });
+
+  const { isLoading: isJoinConfirming, isSuccess: isJoinSuccess } =
+    useWaitForTransactionReceipt({ hash: joinHash });
 
   const { isLoading: isTimeoutConfirming, isSuccess: isTimeoutSuccess } =
     useWaitForTransactionReceipt({ hash: timeoutHash });
 
   // Trigger auto refresh on tx confirmation
   useEffect(() => {
-    if (isMoveSuccess || isTimeoutSuccess) {
+    if (isMoveSuccess || isJoinSuccess || isTimeoutSuccess) {
       onRefresh();
+      resetMoveError();
     }
-  }, [isMoveSuccess, isTimeoutSuccess, onRefresh]);
+  }, [isMoveSuccess, isJoinSuccess, isTimeoutSuccess, onRefresh, resetMoveError]);
 
   // Celebrate on win
   useEffect(() => {
     if (game.status === GameStatus.Won || game.status === GameStatus.Forfeited) {
       if (address && game.winner.toLowerCase() === address.toLowerCase()) {
         confetti({
-          particleCount: 120,
-          spread: 70,
+          particleCount: 140,
+          spread: 80,
           origin: { y: 0.6 },
           colors: ["#00f0ff", "#ff2a5f", "#ffd700", "#7000ff"],
         });
@@ -74,8 +94,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
   }, [game.status, game.winner, address]);
 
-  // Timeout countdown calculations
-  const TIMEOUT_SECONDS = 86400; // 24 hours
+  // Timeout countdown calculations (24 hours inactivity limit)
+  const TIMEOUT_SECONDS = 86400;
   useEffect(() => {
     const updateCountdown = () => {
       const now = Math.floor(Date.now() / 1000);
@@ -115,6 +135,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     !isMyTurn &&
     timeRemaining === 0;
 
+  const canJoinAsPlayer2 =
+    game.status === GameStatus.Waiting &&
+    isConnected &&
+    !isPlayer1;
+
   const handleColumnClick = (colIndex: number) => {
     if (!isMyTurn || isMovePending || isMoveConfirming) return;
     if (game.colHeights[colIndex] >= 6) return;
@@ -124,6 +149,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       abi: TURNCHAIN_ABI,
       functionName: "makeMove",
       args: [game.gameId, colIndex],
+    });
+  };
+
+  const handleJoinGame = () => {
+    if (!canJoinAsPlayer2 || isJoinPending || isJoinConfirming) return;
+    writeJoinGame({
+      address: TURNCHAIN_ADDRESS,
+      abi: TURNCHAIN_ABI,
+      functionName: "joinGame",
+      args: [game.gameId],
     });
   };
 
@@ -137,9 +172,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     });
   };
 
+  const shareUrl = `${window.location.origin}${window.location.pathname}?gameId=${game.gameId.toString()}`;
+
   const handleCopyLink = () => {
-    const url = `${window.location.origin}${window.location.pathname}?gameId=${game.gameId.toString()}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -153,7 +189,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToLobby}
-            className="btn-secondary py-2 px-3 text-xs"
+            className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5"
           >
             <RotateCcw className="w-4 h-4" />
             <span>Lobby</span>
@@ -170,7 +206,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               )}
               {game.status === GameStatus.Active && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  Live Match
+                  Live Match ({game.moveCount} moves)
                 </span>
               )}
               {game.status === GameStatus.Won && (
@@ -180,7 +216,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               )}
               {game.status === GameStatus.Drawn && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                  Draw
+                  Draw (42 moves)
                 </span>
               )}
               {game.status === GameStatus.Forfeited && (
@@ -189,8 +225,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-xs text-[var(--text-muted)]">
-              Total Moves: {game.moveCount} / 42
+            <p className="text-xs text-[var(--text-muted)] font-mono">
+              Moves on chain: {game.moveCount} / 42
             </p>
           </div>
         </div>
@@ -198,7 +234,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyLink}
-            className="btn-secondary py-2 px-3 text-xs"
+            className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5"
+            title="Copy Direct Shareable Invite Link"
           >
             {copied ? (
               <Check className="w-4 h-4 text-emerald-400" />
@@ -210,12 +247,58 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           <button
             onClick={onRefresh}
             className="btn-secondary py-2 px-3 text-xs"
-            title="Refresh Board State"
+            title="Refresh Board State from Chain"
           >
             <RotateCcw className="w-4 h-4 text-[var(--text-muted)] hover:text-white" />
           </button>
         </div>
       </div>
+
+      {/* Direct Invite / Join Callout Banner for Waiting Games */}
+      {game.status === GameStatus.Waiting && (
+        <div className="p-5 rounded-2xl glass-panel border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-transparent flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-center md:text-left">
+            <h3 className="text-sm font-bold text-white flex items-center justify-center md:justify-start gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+              <span>Game #{game.gameId.toString()} is Waiting for Player 2</span>
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">
+              {isPlayer1
+                ? "You hosted this game! Share the invite link with a friend to begin."
+                : "This match is open! Click Join Game to enter as Player 2."}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto justify-center">
+            {canJoinAsPlayer2 ? (
+              <button
+                onClick={handleJoinGame}
+                disabled={isJoinPending || isJoinConfirming}
+                className="btn-primary py-2.5 px-6 text-xs flex items-center gap-2"
+              >
+                <Swords className="w-4 h-4" />
+                <span>
+                  {isJoinPending || isJoinConfirming
+                    ? "Joining on Base Sepolia..."
+                    : "Join Match as Player 2"}
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={handleCopyLink}
+                className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-[#00f0ff]" />
+                )}
+                <span>{copied ? "Copied to Clipboard!" : "Copy Invite Link"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Players Status & Turn Indicator Card */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -317,7 +400,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           <div
             className={`w-full max-w-md mb-6 py-2.5 px-4 rounded-xl text-center text-sm font-semibold flex items-center justify-center gap-2 border ${
               isMyTurn
-                ? "bg-[#00f0ff]/15 text-[#00f0ff] border-[#00f0ff]/40 pulse-active"
+                ? "bg-[#00f0ff]/15 text-[#00f0ff] border-[#00f0ff]/40 pulse-active shadow-[0_0_15px_rgba(0,240,255,0.3)]"
                 : "bg-[var(--bg-secondary)] text-[var(--text-muted)] border-[var(--border-color)]"
             }`}
           >
@@ -329,7 +412,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             ) : (
               <>
                 <Clock className="w-4 h-4 text-amber-400" />
-                <span>Waiting for opponent's on-chain transaction...</span>
+                <span>Waiting for opponent's on-chain move...</span>
               </>
             )}
           </div>
@@ -348,7 +431,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 onMouseEnter={() => setHoveredCol(colIdx)}
                 onMouseLeave={() => setHoveredCol(null)}
                 onClick={() => handleColumnClick(colIdx)}
-                className={`board-column ${!canDrop ? "disabled" : ""}`}
+                className={`board-column ${!canDrop ? "disabled" : ""} ${isFull ? "column-full opacity-60" : ""}`}
+                title={isFull ? `Column ${colIdx} is Full` : canDrop ? `Drop disc in column ${colIdx}` : ""}
               >
                 {[0, 1, 2, 3, 4, 5].map((rowIdx) => {
                   const cellVal = game.board[colIdx]?.[rowIdx] || 0;
@@ -381,18 +465,58 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           })}
         </div>
 
+        {/* Column Number Labels (0-6) */}
+        <div className="flex items-center justify-between w-full max-w-[350px] sm:max-w-[490px] mt-2 px-3 text-xs font-mono text-[var(--text-dim)]">
+          {[0, 1, 2, 3, 4, 5, 6].map((colIdx) => (
+            <span key={colIdx} className="w-8 text-center">
+              {colIdx}
+            </span>
+          ))}
+        </div>
+
         {/* Transaction in progress feedback */}
         {(isMovePending || isMoveConfirming) && (
-          <div className="mt-4 flex items-center gap-2 text-xs font-mono text-[#00f0ff] animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-[#00f0ff]" />
-            <span>Confirming move on Base Sepolia blockchain...</span>
+          <div className="mt-4 p-3 rounded-xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center gap-2 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Submitting move to Base Sepolia...</span>
+            {moveHash && (
+              <a
+                href={`https://sepolia.basescan.org/tx/${moveHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline flex items-center gap-1 text-[#00f0ff] hover:text-white ml-2"
+              >
+                <span>View on BaseScan</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
         )}
 
-        {moveError && (
+        {(isJoinPending || isJoinConfirming) && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-mono text-amber-300 flex items-center gap-2 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Joining match on Base Sepolia...</span>
+            {joinHash && (
+              <a
+                href={`https://sepolia.basescan.org/tx/${joinHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline flex items-center gap-1 text-amber-300 hover:text-white ml-2"
+              >
+                <span>View on BaseScan</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {(moveError || joinError || timeoutError) && (
           <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2 max-w-md">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
-            <span>{moveError.message.slice(0, 120)}...</span>
+            <span>
+              {(moveError || joinError || timeoutError)?.message?.slice(0, 140)}...
+            </span>
           </div>
         )}
       </div>

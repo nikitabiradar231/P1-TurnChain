@@ -1,6 +1,6 @@
 // Contract Address on Base Sepolia (or local fallback)
 export const TURNCHAIN_ADDRESS = (import.meta.env.VITE_CONTRACT_ADDRESS ||
-  "0x892a091461B7844053BFE12E27B139366dC92f97") as `0x${string}`;
+  "0xBbA7fA5D15Ba7C05954235B0E6B913cdE9dfB6db") as `0x${string}`;
 
 export const TURNCHAIN_ABI = [
   {

@@ -12,6 +12,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Search,
+  Share2,
+  Check,
 } from "lucide-react";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
 import { GameStatus } from "../types/game";
@@ -34,12 +36,14 @@ export const GameList: React.FC<GameListProps> = ({
   const { address, isConnected } = useAccount();
   const [joinInputId, setJoinInputId] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "open" | "my">("open");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Create game contract write
   const {
     writeContract: writeCreateGame,
     data: createHash,
     isPending: isCreatePending,
+    error: createError,
   } = useWriteContract();
 
   // Join game contract write
@@ -47,6 +51,7 @@ export const GameList: React.FC<GameListProps> = ({
     writeContract: writeJoinGame,
     data: joinHash,
     isPending: isJoinPending,
+    error: joinError,
   } = useWriteContract();
 
   const { isLoading: isCreateConfirming, isSuccess: isCreateSuccess } =
@@ -71,17 +76,24 @@ export const GameList: React.FC<GameListProps> = ({
     });
   };
 
-  // Handle direct join
+  // Handle direct join / view by ID or URL
   const handleDirectJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!joinInputId.trim()) return;
-    const id = BigInt(joinInputId.trim());
-    writeJoinGame({
-      address: TURNCHAIN_ADDRESS,
-      abi: TURNCHAIN_ABI,
-      functionName: "joinGame",
-      args: [id],
-    });
+
+    let parsedId = joinInputId.trim();
+    // If user pasted a full URL like http://.../?gameId=1
+    if (parsedId.includes("gameId=")) {
+      const match = parsedId.match(/gameId=(\d+)/);
+      if (match && match[1]) {
+        parsedId = match[1];
+      }
+    }
+
+    if (/^\d+$/.test(parsedId)) {
+      const id = BigInt(parsedId);
+      onSelectGame(id);
+    }
   };
 
   const handleJoinSpecific = (gameId: bigint) => {
@@ -91,6 +103,14 @@ export const GameList: React.FC<GameListProps> = ({
       functionName: "joinGame",
       args: [gameId],
     });
+  };
+
+  const handleCopyCardLink = (e: React.MouseEvent, gameId: bigint) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}${window.location.pathname}?gameId=${gameId.toString()}`;
+    navigator.clipboard.writeText(url);
+    setCopiedId(gameId.toString());
+    setTimeout(() => setCopiedId(null), 2500);
   };
 
   const truncate = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -126,7 +146,7 @@ export const GameList: React.FC<GameListProps> = ({
           <p className="text-sm text-[var(--text-muted)] max-w-xl">
             Challenge players worldwide. The smart contract validates every move,
             tracks turn order, evaluates 4-in-a-row wins, and guarantees timeout
-            forfeits.
+            forfeits on Base Sepolia.
           </p>
         </div>
 
@@ -147,33 +167,39 @@ export const GameList: React.FC<GameListProps> = ({
         </div>
       </div>
 
-      {/* Quick Join Bar */}
+      {/* Quick Jump / Lookup Bar */}
       <div className="p-4 rounded-2xl glass-panel flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
           <Search className="w-4 h-4 text-[#00f0ff]" />
-          <span>Join by ID:</span>
+          <span>Quick Open by ID or Link:</span>
         </div>
         <form
           onSubmit={handleDirectJoin}
           className="flex items-center gap-2 w-full sm:w-auto"
         >
           <input
-            type="number"
-            placeholder="Enter Game ID (e.g. 1)"
+            type="text"
+            placeholder="Enter ID or paste link (e.g. 1)"
             value={joinInputId}
             onChange={(e) => setJoinInputId(e.target.value)}
-            className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[#00f0ff] w-full sm:w-48"
+            className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[#00f0ff] w-full sm:w-64"
           />
           <button
             type="submit"
-            disabled={!isConnected || isJoinPending || isJoinConfirming}
-            className="btn-secondary py-2 px-4 text-xs font-semibold"
+            className="btn-secondary py-2 px-4 text-xs font-semibold flex items-center gap-1.5"
           >
             <LogIn className="w-4 h-4 text-[#00f0ff]" />
-            <span>Join</span>
+            <span>Open Match</span>
           </button>
         </form>
       </div>
+
+      {/* Transaction alerts */}
+      {(createError || joinError) && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+          {(createError || joinError)?.message.slice(0, 140)}...
+        </div>
+      )}
 
       {/* Filter Tabs & Game List Table */}
       <div className="space-y-4">
@@ -187,7 +213,7 @@ export const GameList: React.FC<GameListProps> = ({
                   : "text-[var(--text-muted)] hover:text-white"
               }`}
             >
-              Open to Join
+              Open to Join ({games.filter((g) => g.status === GameStatus.Waiting).length})
             </button>
             <button
               onClick={() => setFilterTab("my")}
@@ -243,11 +269,13 @@ export const GameList: React.FC<GameListProps> = ({
                 g.player2.toLowerCase() === address.toLowerCase();
               const canJoin =
                 g.status === GameStatus.Waiting && isConnected && !isCreator;
+              const isCopied = copiedId === g.gameId.toString();
 
               return (
                 <div
                   key={g.gameId.toString()}
-                  className="p-5 rounded-2xl glass-panel hover:border-[#00f0ff]/40 flex flex-col justify-between gap-4 transition-all group"
+                  onClick={() => onSelectGame(g.gameId)}
+                  className="p-5 rounded-2xl glass-panel hover:border-[#00f0ff]/40 flex flex-col justify-between gap-4 transition-all group cursor-pointer"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -315,7 +343,10 @@ export const GameList: React.FC<GameListProps> = ({
                   <div className="pt-2 border-t border-[var(--border-color)] flex items-center gap-2">
                     {canJoin ? (
                       <button
-                        onClick={() => handleJoinSpecific(g.gameId)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleJoinSpecific(g.gameId);
+                        }}
                         disabled={isJoinPending || isJoinConfirming}
                         className="btn-primary w-full py-2 text-xs"
                       >
@@ -331,6 +362,19 @@ export const GameList: React.FC<GameListProps> = ({
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     )}
+
+                    {/* Copy Share Link Icon */}
+                    <button
+                      onClick={(e) => handleCopyCardLink(e, g.gameId)}
+                      className="p-2 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] hover:border-[#00f0ff]/50 text-[var(--text-muted)] hover:text-[#00f0ff] transition-colors"
+                      title="Copy Direct Share Link"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Share2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               );
