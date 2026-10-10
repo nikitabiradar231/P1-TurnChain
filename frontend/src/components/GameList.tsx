@@ -14,10 +14,13 @@ import {
   Search,
   Share2,
   Check,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
 import { GameStatus } from "../types/game";
 import type { GameSummary } from "../types/game";
+import { formatContractError } from "../utils/formatError";
 
 interface GameListProps {
   games: GameSummary[];
@@ -44,6 +47,7 @@ export const GameList: React.FC<GameListProps> = ({
     data: createHash,
     isPending: isCreatePending,
     error: createError,
+    reset: resetCreate,
   } = useWriteContract();
 
   // Join game contract write
@@ -52,6 +56,7 @@ export const GameList: React.FC<GameListProps> = ({
     data: joinHash,
     isPending: isJoinPending,
     error: joinError,
+    reset: resetJoin,
   } = useWriteContract();
 
   const { isLoading: isCreateConfirming, isSuccess: isCreateSuccess } =
@@ -63,12 +68,16 @@ export const GameList: React.FC<GameListProps> = ({
   React.useEffect(() => {
     if (isCreateSuccess || isJoinSuccess) {
       onRefresh();
+      resetCreate();
+      resetJoin();
     }
-  }, [isCreateSuccess, isJoinSuccess, onRefresh]);
+  }, [isCreateSuccess, isJoinSuccess, onRefresh, resetCreate, resetJoin]);
 
   // Handle create game
   const handleCreateGame = () => {
-    if (!isConnected) return;
+    if (!isConnected || isCreatePending || isCreateConfirming) return;
+    resetCreate();
+    resetJoin();
     writeCreateGame({
       address: TURNCHAIN_ADDRESS,
       abi: TURNCHAIN_ABI,
@@ -97,6 +106,9 @@ export const GameList: React.FC<GameListProps> = ({
   };
 
   const handleJoinSpecific = (gameId: bigint) => {
+    if (!isConnected || isJoinPending || isJoinConfirming) return;
+    resetCreate();
+    resetJoin();
     writeJoinGame({
       address: TURNCHAIN_ADDRESS,
       abi: TURNCHAIN_ABI,
@@ -159,8 +171,10 @@ export const GameList: React.FC<GameListProps> = ({
           >
             <PlusCircle className="w-5 h-5" />
             <span>
-              {isCreatePending || isCreateConfirming
-                ? "Creating on-chain..."
+              {isCreatePending
+                ? "Confirm in Wallet..."
+                : isCreateConfirming
+                ? "Creating on Base Sepolia..."
                 : "Create New Game"}
             </span>
           </button>
@@ -196,8 +210,21 @@ export const GameList: React.FC<GameListProps> = ({
 
       {/* Transaction alerts */}
       {(createError || joinError) && (
-        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
-          {(createError || joinError)?.message.slice(0, 140)}...
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+            <span>{formatContractError(createError || joinError)}</span>
+          </div>
+          <button
+            onClick={() => {
+              resetCreate();
+              resetJoin();
+            }}
+            className="p-1 hover:text-white text-rose-400 transition-colors"
+            title="Dismiss error"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

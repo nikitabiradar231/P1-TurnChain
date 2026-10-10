@@ -112,6 +112,8 @@ Traditional online board games depend on centralized game servers and databases 
 │   │   └── index.css              # Cyberpunk neon design system & animations
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/
+│   └── screenshots/               # Application UI presentation assets
 ├── foundry.toml                   # Foundry profile & optimizer configuration
 ├── .env.example                   # Environment configuration template
 └── README.md
@@ -246,6 +248,18 @@ Suite result: ok. 22 passed; 0 failed; 0 skipped
 | **4** | **Turn 1 (P1)** | Account A drops a disc in column 3. | ⏳ Pending Manual 2nd Account Execution |
 | **5** | **Turn 2 (P2)** | Account B sees board update and drops disc in column 3. | ⏳ Pending Manual 2nd Account Execution |
 | **6** | **Win Detection** | Complete 4-in-a-row to trigger win status and confetti. | ⏳ Pending Manual 2nd Account Execution |
+
+---
+
+## 🔧 Troubleshooting Guide
+
+| Issue | Cause | Solution |
+| :--- | :--- | :--- |
+| **"Wrong Network" / Chain Mismatch** | Wallet is connected to Ethereum Mainnet or another testnet | Click the yellow **"Switch to Base Sepolia"** alert button in the header, or change network to Base Sepolia (`84532`) in your wallet extension. |
+| **"Insufficient Funds for Gas"** | Account lacks Base Sepolia testnet ETH | Click the in-app **Faucet** button in the header to access free faucets (Superchain, Coinbase, QuickNode, LearnWeb3). |
+| **"Game Not Found" on Direct Link** | URL parameter has an invalid or non-existent match ID | Check the game ID or click **"Return to Lobby"** to pick an active match. |
+| **"Column Full" Disallowed Move** | Column already has 6 discs | Select an unoccupied or partially filled column (0–6). |
+| **Transaction Rejected by User** | User clicked "Reject" in MetaMask prompt | Re-click the column or action button to prompt your wallet again. |
 
 ---
 

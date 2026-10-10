@@ -16,11 +16,13 @@ import {
   ExternalLink,
   Loader2,
   Copy,
+  X,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
 import { GameStatus } from "../types/game";
 import type { Game } from "../types/game";
+import { formatContractError } from "../utils/formatError";
 
 interface GameBoardProps {
   game: Game;
@@ -53,6 +55,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     data: joinHash,
     isPending: isJoinPending,
     error: joinError,
+    reset: resetJoinError,
   } = useWriteContract();
 
   // Timeout contract write
@@ -61,6 +64,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     data: timeoutHash,
     isPending: isTimeoutPending,
     error: timeoutError,
+    reset: resetTimeoutError,
   } = useWriteContract();
 
   const { isLoading: isMoveConfirming, isSuccess: isMoveSuccess } =
@@ -77,8 +81,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     if (isMoveSuccess || isJoinSuccess || isTimeoutSuccess) {
       onRefresh();
       resetMoveError();
+      resetJoinError();
+      resetTimeoutError();
     }
-  }, [isMoveSuccess, isJoinSuccess, isTimeoutSuccess, onRefresh, resetMoveError]);
+  }, [
+    isMoveSuccess,
+    isJoinSuccess,
+    isTimeoutSuccess,
+    onRefresh,
+    resetMoveError,
+    resetJoinError,
+    resetTimeoutError,
+  ]);
 
   // Celebrate on win
   useEffect(() => {
@@ -144,6 +158,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     if (!isMyTurn || isMovePending || isMoveConfirming) return;
     if (game.colHeights[colIndex] >= 6) return;
 
+    resetMoveError();
+    resetJoinError();
+    resetTimeoutError();
     writeMove({
       address: TURNCHAIN_ADDRESS,
       abi: TURNCHAIN_ABI,
@@ -154,6 +171,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
   const handleJoinGame = () => {
     if (!canJoinAsPlayer2 || isJoinPending || isJoinConfirming) return;
+    resetMoveError();
+    resetJoinError();
+    resetTimeoutError();
     writeJoinGame({
       address: TURNCHAIN_ADDRESS,
       abi: TURNCHAIN_ABI,
@@ -164,6 +184,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
   const handleClaimTimeout = () => {
     if (!isTimeoutClaimable || isTimeoutPending || isTimeoutConfirming) return;
+    resetMoveError();
+    resetJoinError();
+    resetTimeoutError();
     writeTimeout({
       address: TURNCHAIN_ADDRESS,
       abi: TURNCHAIN_ABI,
@@ -278,7 +301,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               >
                 <Swords className="w-4 h-4" />
                 <span>
-                  {isJoinPending || isJoinConfirming
+                  {isJoinPending
+                    ? "Confirm in Wallet..."
+                    : isJoinConfirming
                     ? "Joining on Base Sepolia..."
                     : "Join Match as Player 2"}
                 </span>
@@ -512,11 +537,22 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         )}
 
         {(moveError || joinError || timeoutError) && (
-          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2 max-w-md">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
-            <span>
-              {(moveError || joinError || timeoutError)?.message?.slice(0, 140)}...
-            </span>
+          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between gap-2 max-w-md w-full">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+              <span>{formatContractError(moveError || joinError || timeoutError)}</span>
+            </div>
+            <button
+              onClick={() => {
+                resetMoveError();
+                resetJoinError();
+                resetTimeoutError();
+              }}
+              className="p-1 hover:text-white text-rose-400 transition-colors"
+              title="Dismiss error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>
