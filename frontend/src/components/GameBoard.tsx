@@ -3,7 +3,11 @@ import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
+  useConnect,
+  useChainId,
+  useSwitchChain,
 } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
 import {
   Share2,
   Clock,
@@ -17,6 +21,8 @@ import {
   Loader2,
   Copy,
   X,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
@@ -36,9 +42,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onBackToLobby,
 }) => {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { connect, connectors, isPending: isConnectingWallet } = useConnect();
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
+
+  const isWrongChain = isConnected && chainId !== baseSepolia.id;
 
   // Move contract write
   const {
@@ -286,14 +297,42 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               <span>Game #{game.gameId.toString()} is Waiting for Player 2</span>
             </h3>
             <p className="text-xs text-[var(--text-muted)]">
-              {isPlayer1
-                ? "You hosted this game! Share the invite link with a friend to begin."
-                : "This match is open! Click Join Game to enter as Player 2."}
+              {!isConnected
+                ? "This match is open on Base Sepolia! Connect your wallet as Player 2 to join."
+                : isWrongChain
+                ? "Your wallet is on a different network. Switch to Base Sepolia (Chain ID: 84532) to join."
+                : isPlayer1
+                ? "You hosted this game as Player 1! To test joining, switch MetaMask to Account 2 or copy the invite link."
+                : "This match is open! Click Join Game to enter as Player 2 (Cyan)."}
             </p>
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-center">
-            {canJoinAsPlayer2 ? (
+            {!isConnected ? (
+              <button
+                onClick={() => {
+                  const connector = connectors[0];
+                  if (connector) connect({ connector });
+                }}
+                disabled={isConnectingWallet}
+                className="btn-primary py-2.5 px-6 text-xs flex items-center gap-2"
+              >
+                <Wallet className="w-4 h-4" />
+                <span>
+                  {isConnectingWallet
+                    ? "Connecting Wallet..."
+                    : "Connect Wallet to Join"}
+                </span>
+              </button>
+            ) : isWrongChain ? (
+              <button
+                onClick={() => switchChain({ chainId: baseSepolia.id })}
+                className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 hover:bg-amber-500/30 transition-colors"
+              >
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+                <span>Switch to Base Sepolia</span>
+              </button>
+            ) : canJoinAsPlayer2 ? (
               <button
                 onClick={handleJoinGame}
                 disabled={isJoinPending || isJoinConfirming}
@@ -318,7 +357,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 ) : (
                   <Copy className="w-4 h-4 text-[#00f0ff]" />
                 )}
-                <span>{copied ? "Copied to Clipboard!" : "Copy Invite Link"}</span>
+                <span>
+                  {copied ? "Copied to Clipboard!" : "Copy Invite Link"}
+                </span>
               </button>
             )}
           </div>

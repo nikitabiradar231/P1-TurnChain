@@ -3,7 +3,11 @@ import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
+  useConnect,
+  useChainId,
+  useSwitchChain,
 } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
 import {
   PlusCircle,
   LogIn,
@@ -16,6 +20,8 @@ import {
   Check,
   AlertTriangle,
   X,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
 import { GameStatus } from "../types/game";
@@ -37,9 +43,14 @@ export const GameList: React.FC<GameListProps> = ({
   onRefresh,
 }) => {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { connect, connectors, isPending: isConnectingWallet } = useConnect();
   const [joinInputId, setJoinInputId] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "open" | "my">("open");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const isWrongChain = isConnected && chainId !== baseSepolia.id;
 
   // Create game contract write
   const {
@@ -164,20 +175,46 @@ export const GameList: React.FC<GameListProps> = ({
 
         {/* Action button */}
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          <button
-            onClick={handleCreateGame}
-            disabled={!isConnected || isCreatePending || isCreateConfirming}
-            className="btn-primary w-full sm:w-auto py-3.5 px-6 text-sm"
-          >
-            <PlusCircle className="w-5 h-5" />
-            <span>
-              {isCreatePending
-                ? "Confirm in Wallet..."
-                : isCreateConfirming
-                ? "Creating on Base Sepolia..."
-                : "Create New Game"}
-            </span>
-          </button>
+          {!isConnected ? (
+            <button
+              onClick={() => {
+                const connector = connectors[0];
+                if (connector) connect({ connector });
+              }}
+              disabled={isConnectingWallet}
+              className="btn-primary w-full sm:w-auto py-3.5 px-6 text-sm flex items-center justify-center gap-2"
+            >
+              <Wallet className="w-5 h-5" />
+              <span>
+                {isConnectingWallet
+                  ? "Connecting Wallet..."
+                  : "Connect Wallet to Host"}
+              </span>
+            </button>
+          ) : isWrongChain ? (
+            <button
+              onClick={() => switchChain({ chainId: baseSepolia.id })}
+              className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-6 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-amber-500/30 transition-colors w-full sm:w-auto"
+            >
+              <AlertCircle className="w-5 h-5 text-amber-400" />
+              <span>Switch to Base Sepolia</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleCreateGame}
+              disabled={isCreatePending || isCreateConfirming}
+              className="btn-primary w-full sm:w-auto py-3.5 px-6 text-sm"
+            >
+              <PlusCircle className="w-5 h-5" />
+              <span>
+                {isCreatePending
+                  ? "Confirm in Wallet..."
+                  : isCreateConfirming
+                  ? "Creating on Base Sepolia..."
+                  : "Create New Game"}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
