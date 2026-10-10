@@ -4,6 +4,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useConnect,
+  useDisconnect,
   useChainId,
   useSwitchChain,
 } from "wagmi";
@@ -23,6 +24,7 @@ import {
   X,
   Wallet,
   AlertCircle,
+  LogOut,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { TURNCHAIN_ADDRESS, TURNCHAIN_ABI } from "../config/contract";
@@ -45,6 +47,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const { connect, connectors, isPending: isConnectingWallet } = useConnect();
+  const { disconnect } = useDisconnect();
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
@@ -348,19 +351,29 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 </span>
               </button>
             ) : (
-              <button
-                onClick={handleCopyLink}
-                className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-[#00f0ff]" />
-                )}
-                <span>
-                  {copied ? "Copied to Clipboard!" : "Copy Invite Link"}
-                </span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleCopyLink}
+                  className="btn-secondary py-2.5 px-4 text-xs flex items-center gap-2"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-[#00f0ff]" />
+                  )}
+                  <span>
+                    {copied ? "Copied to Clipboard!" : "Copy Invite Link"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => disconnect()}
+                  className="btn-secondary py-2.5 px-3 text-xs flex items-center gap-1.5 text-amber-300 border-amber-500/30 hover:border-amber-500/50"
+                  title="Disconnect current host account to connect Account 2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Switch Account</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
